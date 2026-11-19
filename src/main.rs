@@ -15,6 +15,9 @@
 // Read      = the trait that gives us .read_exact()
 use std::io::{self, ErrorKind::UnexpectedEof, Read};
 
+// Live Kit wake word model for detecting wake words in audio streams.
+use livekit_wakeword::WakeWordModel;
+
 // Number of BYTES we read at a time.
 // 2560 bytes / 2 bytes per sample = 1280 samples.
 // At 16,000 samples per second, 1280 samples = 0.08 s = 80 ms of audio.
@@ -30,6 +33,7 @@ const BAR_DIVISOR: usize = 200;
 // Longest bar we ever print, so loud sounds don't flood the terminal.
 const MAX_BAR_LENGTH: usize = 60;
 
+
 fn main() {
     // Fixed-size buffer that holds one chunk of raw bytes.
     // Rust infers the type [u8; 2560] because read_exact() needs bytes.
@@ -41,6 +45,15 @@ fn main() {
     // Lock stdin once and reuse the handle.
     // Locking every loop would be slower; locking once is the usual pattern.
     let mut handle = io::stdin().lock();
+
+    // Loading the model with input sample rate
+    let mut model = match WakeWordModel::new(&["hey_livekit.onnx"], 16000) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("Error initializing wake word model: {}", e);
+            return;
+        }
+    };
 
     // Keep reading chunks until the stream ends or an error happens.
     loop {
@@ -56,36 +69,63 @@ fn main() {
                 // (32767 * 32767 is about 1 billion).
                 let mut sum_sq: f64 = 0.0;
 
-                // Walk through the bytes two at a time: each pair is one sample.
-                for chunk in bucket.chunks_exact(2) {
-                    // Turn 2 bytes into one signed 16-bit number.
-                    // "le" = little-endian: low byte first, then high byte.
-                    // try_into() converts the &[u8] slice into a [u8; 2] array;
-                    // unwrap() is safe here because chunks_exact(2) always gives 2 bytes.
+                
+                
+                
+                let samples: Vec<i16> = bucket.chunks_exact(2).map(|chunk| {
                     let num: i16 = i16::from_le_bytes(chunk.try_into().unwrap());
+                    return num;
+                }).collect();
 
-                    // Convert to f64 so we can square it without overflow.
-                    let s = num as f64;
+                let scores = match model.predict(&samples){
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("Error during wake word prediction: {}", e);
+                        return;
+                    }
+                };
 
-                    // Square it: negative and positive values both become positive,
-                    // so the wave going up and down doesn't cancel out.
-                    sum_sq = sum_sq + s * s;
+                if scores["hey_livekit"] > 0.5 {
+                    println!("Wake word detected!");
+                    match model.reset() {
+                        Ok(_) => (),
+                        Err(e) => {
+                            eprintln!("Error resetting wake word model: {}", e);
+                            return;
+                        }
+                    }
                 }
+                
+                // // Walk through the bytes two at a time: each pair is one sample.
+                // for chunk in bucket.chunks_exact(2) {
+                //     // Turn 2 bytes into one signed 16-bit number.
+                //     // "le" = little-endian: low byte first, then high byte.
+                //     // try_into() converts the &[u8] slice into a [u8; 2] array;
+                //     // unwrap() is safe here because chunks_exact(2) always gives 2 bytes.
+                //     let num: i16 = i16::from_le_bytes(chunk.try_into().unwrap());
 
-                // RMS = Root Mean Square = "average loudness" of the chunk:
-                //   1. Square every sample   (done in the loop above)
-                //   2. Take the Mean         (divide by the number of samples)
-                //   3. Take the square Root  (bring it back to the sample scale)
-                let mean_sq = sum_sq / SAMPLES_PER_CHUNK as f64;
-                let rms = mean_sq.sqrt();
+                //     // Convert to f64 so we can square it without overflow.
+                //     let s = num as f64;
 
-                // Turn loudness into a bar length (number of '#'), then cap it.
-                let mut bar_len = (rms / BAR_DIVISOR as f64) as usize;
-                bar_len = bar_len.min(MAX_BAR_LENGTH);
+                //     // Square it: negative and positive values both become positive,
+                //     // so the wave going up and down doesn't cancel out.
+                //     sum_sq = sum_sq + s * s;
+                // }
 
-                // Print: chunk number (5 wide), RMS value (6 wide, no decimals), bar.
-                // Example line:   42    1830 : #########
-                println!("{:5.0} {:6.0} : {}", chunk_count, rms, "#".repeat(bar_len));
+                // // RMS = Root Mean Square = "average loudness" of the chunk:
+                // //   1. Square every sample   (done in the loop above)
+                // //   2. Take the Mean         (divide by the number of samples)
+                // //   3. Take the square Root  (bring it back to the sample scale)
+                // let mean_sq = sum_sq / SAMPLES_PER_CHUNK as f64;
+                // let rms = mean_sq.sqrt();
+
+                // // Turn loudness into a bar length (number of '#'), then cap it.
+                // let mut bar_len = (rms / BAR_DIVISOR as f64) as usize;
+                // bar_len = bar_len.min(MAX_BAR_LENGTH);
+
+                // // Print: chunk number (5 wide), RMS value (6 wide, no decimals), bar.
+                // // Example line:   42    1830 : #########
+                // println!("{:5.0} {:6.0} : {}", chunk_count, rms, "#".repeat(bar_len));
             }
 
             // The stream ended before a full bucket could be read.
