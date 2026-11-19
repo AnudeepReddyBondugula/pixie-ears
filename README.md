@@ -2,7 +2,7 @@
 
 **The ears of Pixie**: a small Rust program that listens to raw audio and, step by step, learns to hear the wake word **"Hey Pixie"**.
 
-pixie-ears is part of **Project Pixie**, an open-source desk buddy robot that runs on an old Android phone (Redmi Note 8). This repo is also a learning project: it is being built one small step at a time by someone new to Rust.
+pixie-ears is part of **Project Pixie**, an open-source desk buddy robot.
 
 > **Status:** Step 1 done. pixie-ears currently works as a **live volume meter**. Wake word detection is coming in Steps 2 and 3.
 
@@ -188,18 +188,6 @@ Change these constants at the top of `src/main.rs`:
 
 ---
 
-## Project structure
-
-```
-pixie-ears/
-├── Cargo.toml       # Rust package info
-├── src/
-│   └── main.rs      # volume meter (Step 1)
-└── README.md
-```
-
----
-
 ## Roadmap
 
 - [x] **Step 0:** Install tools (Rust, FFmpeg, Termux)
@@ -222,18 +210,6 @@ The wake word is meant to respond to **anyone** who says "Hey Pixie", not only o
 | pixied | Go | Core: commands, devices, routing |
 | Brain | llama.cpp + small local model | Understanding requests |
 | Face | React | Animated eyes and emotions |
-
----
-
-## Troubleshooting
-
-| Problem | Likely cause and fix |
-| --- | --- |
-| Bars are always empty | Wrong mic selected, or mic muted. Check the device name and Windows sound settings. |
-| Bars are always full | `BAR_DIVISOR` too small, or the audio format is wrong (not `s16le`). |
-| Random huge numbers | Audio corrupted by Windows PowerShell 5. Use `cmd` instead. |
-| `Unexpected EOF reached` right away | The recorder failed to start. Run the FFmpeg/parec part alone to see its error. |
-| `parec`: connection refused | PulseAudio isn't running. Run step 3 of the Termux setup again. |
 
 ---
 
