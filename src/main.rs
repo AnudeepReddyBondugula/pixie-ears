@@ -26,21 +26,11 @@ const BUCKET_SIZE: usize = 2560;
 // Number of SAMPLES in one bucket (each i16 sample takes 2 bytes).
 const SAMPLES_PER_CHUNK: usize = BUCKET_SIZE / 2;
 
-// Scales loudness down to a bar length: every 200 units of RMS = one '#'.
-// Make it smaller for a more sensitive meter, bigger for a calmer one.
-const BAR_DIVISOR: usize = 200;
-
-// Longest bar we ever print, so loud sounds don't flood the terminal.
-const MAX_BAR_LENGTH: usize = 60;
-
 
 fn main() {
     // Fixed-size buffer that holds one chunk of raw bytes.
     // Rust infers the type [u8; 2560] because read_exact() needs bytes.
     let mut bucket = [0; BUCKET_SIZE];
-
-    // Counts how many chunks we have processed (used as a line number).
-    let mut chunk_count = 0;
 
     // Lock stdin once and reuse the handle.
     // Locking every loop would be slower; locking once is the usual pattern.
@@ -61,16 +51,7 @@ fn main() {
         // It never gives us a half-filled bucket.
         match handle.read_exact(&mut bucket) {
             // Success: we have exactly one full chunk of audio.
-            Ok(()) => {
-                chunk_count += 1;
-
-                // Running total of (sample * sample) for this chunk.
-                // f64 is used because the squares get very large
-                // (32767 * 32767 is about 1 billion).
-                let mut sum_sq: f64 = 0.0;
-
-                
-                
+            Ok(()) => {               
                 
                 let samples: Vec<i16> = bucket.chunks_exact(2).map(|chunk| {
                     let num: i16 = i16::from_le_bytes(chunk.try_into().unwrap());
@@ -95,37 +76,6 @@ fn main() {
                         }
                     }
                 }
-                
-                // // Walk through the bytes two at a time: each pair is one sample.
-                // for chunk in bucket.chunks_exact(2) {
-                //     // Turn 2 bytes into one signed 16-bit number.
-                //     // "le" = little-endian: low byte first, then high byte.
-                //     // try_into() converts the &[u8] slice into a [u8; 2] array;
-                //     // unwrap() is safe here because chunks_exact(2) always gives 2 bytes.
-                //     let num: i16 = i16::from_le_bytes(chunk.try_into().unwrap());
-
-                //     // Convert to f64 so we can square it without overflow.
-                //     let s = num as f64;
-
-                //     // Square it: negative and positive values both become positive,
-                //     // so the wave going up and down doesn't cancel out.
-                //     sum_sq = sum_sq + s * s;
-                // }
-
-                // // RMS = Root Mean Square = "average loudness" of the chunk:
-                // //   1. Square every sample   (done in the loop above)
-                // //   2. Take the Mean         (divide by the number of samples)
-                // //   3. Take the square Root  (bring it back to the sample scale)
-                // let mean_sq = sum_sq / SAMPLES_PER_CHUNK as f64;
-                // let rms = mean_sq.sqrt();
-
-                // // Turn loudness into a bar length (number of '#'), then cap it.
-                // let mut bar_len = (rms / BAR_DIVISOR as f64) as usize;
-                // bar_len = bar_len.min(MAX_BAR_LENGTH);
-
-                // // Print: chunk number (5 wide), RMS value (6 wide, no decimals), bar.
-                // // Example line:   42    1830 : #########
-                // println!("{:5.0} {:6.0} : {}", chunk_count, rms, "#".repeat(bar_len));
             }
 
             // The stream ended before a full bucket could be read.
